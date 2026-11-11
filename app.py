@@ -1,9 +1,8 @@
 import streamlit as st
-import tensorflow as tf
-from keras.applications.mobilenet_v2 import preprocess_input
 from PIL import Image
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 # Configuración de la página
 st.set_page_config(
@@ -13,12 +12,14 @@ st.set_page_config(
 )
 
 # 1. Cargar el modelo en memoria (usando cache para evitar recargarlo en cada interacción)
+RUTA_MODELO = Path(__file__).resolve().parent / "modelo_imagenette_mobilenet.keras"
+
+
 @st.cache_resource
 def cargar_modelo():
-    return tf.keras.models.load_model("modelo_imagenette_mobilenet.keras")
+    import tensorflow as tf
 
-with st.spinner("Cargando red neuronal convolucional MobileNetV2..."):
-    model = cargar_modelo()
+    return tf.keras.models.load_model(RUTA_MODELO)
 
 # Nombres de las 10 clases en el orden exacto del entrenamiento
 NOMBRES_CLASES = [
@@ -36,7 +37,7 @@ NOMBRES_CLASES = [
 
 # Panel lateral con información técnica del modelo
 with st.sidebar:
-    st.header("ℹ️ Ficha Técnica del Modelo")
+    st.header("Ficha Técnica del Modelo")
     st.markdown("""
     - **Arquitectura Base:** MobileNetV2
     - **Técnica:** *Transfer Learning* (Fine-tuning)
@@ -45,7 +46,7 @@ with st.sidebar:
     - **Dataset:** Imagenette (Subconjunto de 10 clases de ImageNet)
     """)
     st.divider()
-    st.subheader("📋 Clases Reconocidas (10)")
+    st.subheader("Clases Reconocidas (10)")
     for i, clase in enumerate(NOMBRES_CLASES, start=1):
         st.caption(f"**{i}.** {clase}")
 
@@ -59,6 +60,9 @@ st.write("Sube una imagen en formato JPG, JPEG o PNG para realizar la inferencia
 archivo_subido = st.file_uploader("Selecciona una imagen...", type=["jpg", "jpeg", "png"])
 
 if archivo_subido is not None:
+    with st.spinner("Cargando red neuronal convolucional MobileNetV2..."):
+        model = cargar_modelo()
+
     # Cargar imagen original
     imagen_pil = Image.open(archivo_subido).convert('RGB')
     
@@ -70,6 +74,8 @@ if archivo_subido is not None:
     
     # 2. Preprocesamiento de la imagen
     # Redimensionar a 224x224 requerido por MobileNetV2
+    from keras.applications.mobilenet_v2 import preprocess_input
+
     img_resized = imagen_pil.resize((224, 224))
     img_array = np.array(img_resized, dtype=np.float32)
     
@@ -90,11 +96,11 @@ if archivo_subido is not None:
     confianza_top1 = predicciones[idx_top1] * 100
     
     with col2:
-        st.subheader("🎯 Resultado de Inferencia")
+        st.subheader("Resultado de Inferencia")
         st.success(f"**Predicción Principal:** {clase_top1}")
         st.metric(label="Nivel de Confianza (Top-1)", value=f"{confianza_top1:.2f}%")
         
-        st.markdown("#### 🏆 Top-3 Clases Más Probables")
+        st.markdown("#### Top-3 Clases Más Probables")
         for rank, idx in enumerate(indices_ordenados[:3], start=1):
             prob = float(predicciones[idx])
             col_txt, col_bar = st.columns([2, 3])
@@ -106,7 +112,7 @@ if archivo_subido is not None:
     st.divider()
     
     # 4. Visualización de probabilidades ordenada
-    st.subheader("📊 Distribución Completa de Confianza")
+    st.subheader("Distribución Completa de Confianza")
     
     df_probabilidades = pd.DataFrame({
         "Clase": [NOMBRES_CLASES[i] for i in indices_ordenados],
@@ -115,5 +121,5 @@ if archivo_subido is not None:
     
     st.bar_chart(df_probabilidades)
     
-    with st.expander("🔍 Ver tabla detallada de probabilidades"):
+    with st.expander("Ver tabla detallada de probabilidades"):
         st.dataframe(df_probabilidades.style.format({"Confianza (%)": "{:.2f}%"}), width="stretch")
